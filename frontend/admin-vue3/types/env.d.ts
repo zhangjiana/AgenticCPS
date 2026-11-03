@@ -9,6 +9,8 @@ declare module '*.vue' {
 
 interface ImportMetaEnv {
   readonly VITE_APP_TITLE: string
+  /** cps: rebate operations only; full: original admin navigation */
+  readonly VITE_ADMIN_SCOPE: 'cps' | 'full'
   readonly VITE_PORT: number
   readonly VITE_OPEN: string
   readonly VITE_DEV: string

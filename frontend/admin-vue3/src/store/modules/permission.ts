@@ -4,6 +4,7 @@ import { cloneDeep } from 'lodash-es'
 import remainingRouter from '@/router/modules/remaining'
 import { flatMultiLevelRoutes, generateRoute } from '@/utils/routerHelper'
 import { CACHE_KEY, useCache } from '@/hooks/web/useCache'
+import { filterCpsAdminMenus } from '@/utils/cpsAdminMenu'
 
 const { wsCache } = useCache()
 
@@ -39,7 +40,11 @@ export const usePermissionStore = defineStore('permission', {
         if (roleRouters) {
           res = roleRouters as AppCustomRouteRecordRaw[]
         }
-        const routerMap: AppRouteRecordRaw[] = generateRoute(res)
+        // CPS mode is a focused navigation, not a replacement for backend RBAC.
+        // Filter only the routes returned by the authenticated user's menu API.
+        const scopedMenus =
+          import.meta.env.VITE_ADMIN_SCOPE === 'cps' ? filterCpsAdminMenus(res) : res
+        const routerMap: AppRouteRecordRaw[] = generateRoute(scopedMenus)
         // 动态路由，404一定要放到最后面
         // preschooler：vue-router@4以后已支持静态404路由，此处可不再追加
         this.addRouters = routerMap.concat([
