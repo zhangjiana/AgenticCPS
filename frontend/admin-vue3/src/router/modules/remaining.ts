@@ -59,7 +59,10 @@ const remainingRouter: AppRouteRecordRaw[] = [
     children: [
       {
         path: 'index',
-        component: () => import('@/views/Home/Index.vue'),
+        component:
+          import.meta.env.VITE_ADMIN_SCOPE === 'cps'
+            ? () => import('@/views/cps/workbench/index.vue')
+            : () => import('@/views/Home/Index.vue'),
         name: 'Index',
         meta: {
           title: t('router.home'),
