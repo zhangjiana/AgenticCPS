@@ -11,6 +11,20 @@
         :placeholder="content.placeholder"
         :maxlength="500"
       />
+      <view class="transfer-actions">
+        <picker
+          class="platform-picker"
+          mode="selector"
+          :range="platformOptions"
+          range-key="label"
+          :value="state.platformIndex"
+          @change="onPlatformChange"
+        >
+          <view class="platform-picker-label">{{ selectedPlatformLabel }} ▾</view>
+        </picker>
+        <button class="ss-reset-button paste-button" @tap="pasteFromClipboard">粘贴链接</button>
+      </view>
+      <view class="transfer-platform-hint">{{ platformHint }}</view>
       <button class="ss-reset-button transfer-button" :disabled="state.loading" @tap="transfer">{{
         state.loading ? '处理中...' : content.buttonText
       }}</button>
@@ -68,6 +82,7 @@
   import sheep from '@/sheep';
   import { showAuthModal } from '@/sheep/hooks/useModal';
   import CpsGoodsApi from '@/sheep/api/cps/goods';
+  import { detectCpsPlatform } from '@/sheep/helper/cpsPlatform';
   import {
     copyPromotionValue,
     formatMoney,
@@ -84,9 +99,46 @@
     description: props.data.description || '粘贴商品链接或口令，生成专属返利链接',
     placeholder: props.data.placeholder || '粘贴商品链接、商品 ID 或口令',
     buttonText: props.data.buttonText || '立即转链',
-    platformCode: props.data.platformCode || 'taobao',
+    platformCode: props.data.platformCode || 'auto',
   }));
-  const state = reactive({ input: '', loading: false, result: null });
+  const platformOptions = [
+    { label: '自动识别', value: 'auto' },
+    { label: '淘宝', value: 'taobao' },
+    { label: '京东', value: 'jd' },
+    { label: '拼多多', value: 'pdd' },
+    { label: '抖音', value: 'douyin' },
+  ];
+  const state = reactive({ input: '', loading: false, result: null, platformIndex: 0 });
+  const selectedPlatformLabel = computed(() => platformOptions[state.platformIndex].label);
+  const platformHint = computed(() => {
+    if (state.platformIndex !== 0) return `当前已选择${selectedPlatformLabel.value}`;
+    const code = detectCpsPlatform(state.input);
+    return code ? `已识别为${platformText(code)}` : '无法识别的平台可手动选择';
+  });
+  function onPlatformChange(event) {
+    state.platformIndex = Number(event.detail.value);
+    state.result = null;
+  }
+  function pasteFromClipboard() {
+    uni.getClipboardData({
+      success: ({ data }) => {
+        const value = String(data || '').trim();
+        if (!value) {
+          sheep.$helper.toast('剪贴板为空');
+          return;
+        }
+        state.input = value.slice(0, 500);
+        state.result = null;
+      },
+      fail: () => sheep.$helper.toast('读取剪贴板失败，请手动粘贴'),
+    });
+  }
+  function resolvePlatformCode(originalContent) {
+    const selected = platformOptions[state.platformIndex].value;
+    if (selected !== 'auto') return selected;
+    return detectCpsPlatform(originalContent) ||
+      (content.value.platformCode !== 'auto' ? content.value.platformCode : '');
+  }
   const panelStyle = computed(() => ({
     borderRadius: `${Number(props.styles.borderRadius || 8)}px`,
   }));
@@ -97,6 +149,11 @@
   async function transfer() {
     const originalContent = state.input.trim();
     if (!originalContent || state.loading) return;
+    const platformCode = resolvePlatformCode(originalContent);
+    if (!platformCode) {
+      sheep.$helper.toast('无法识别商品平台，请手动选择');
+      return;
+    }
     if (!sheep.$store('user').isLogin) {
       showAuthModal();
       return;
@@ -105,7 +162,7 @@
     state.result = null;
     try {
       const parsed = await CpsGoodsApi.parseContent({
-        platformCode: content.value.platformCode,
+        platformCode,
         originalContent,
       });
       if (parsed?.code !== 0 || !parsed.data?.supported) {
@@ -113,7 +170,7 @@
         return;
       }
       const linked = await CpsGoodsApi.generateLink({
-        platformCode: parsed.data.platformCode || content.value.platformCode,
+        platformCode: parsed.data.platformCode || platformCode,
         goodsId: parsed.data.goodsId,
         goodsSign: parsed.data.goodsSign,
         originalContent,
@@ -140,7 +197,8 @@
     }
   }
   async function copyResult() {
-    const value = state.result?.shortUrl || state.result?.longUrl || state.result?.tpwd;
+    const value = state.result?.promotionUrl || state.result?.mobileUrl ||
+      state.result?.shortUrl || state.result?.longUrl || state.result?.tpwd;
     if (!value) return;
     await copyPromotionValue(value);
     sheep.$helper.toast('推广链接已复制');
@@ -148,7 +206,7 @@
   async function copyRebateCopy() {
     const result = state.result;
     if (!result) return;
-    const value = result.shortUrl || result.longUrl || result.mobileUrl || result.tpwd || '';
+    const value = result.promotionUrl || result.mobileUrl || result.shortUrl || result.longUrl || result.tpwd || '';
     const hasOrigin = toNumber(result.originalPrice) > toNumber(result.actualPrice);
     const lines = [
       result.title || '精选商品',
@@ -199,6 +257,38 @@
     color: #333;
     font-size: 25rpx;
     line-height: 1.55;
+  }
+  .transfer-actions {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    margin-top: 12rpx;
+  }
+  .platform-picker {
+    flex: 1;
+    min-width: 0;
+  }
+  .platform-picker-label {
+    padding: 16rpx;
+    border: 1rpx solid #d9e2df;
+    border-radius: 12rpx;
+    color: #334155;
+    font-size: 24rpx;
+    text-align: center;
+  }
+  .paste-button {
+    flex: 1;
+    height: 62rpx;
+    border-radius: 12rpx;
+    background: #eaf8f0;
+    color: #068448;
+    font-size: 24rpx;
+    line-height: 62rpx;
+  }
+  .transfer-platform-hint {
+    margin-top: 10rpx;
+    color: #728079;
+    font-size: 21rpx;
   }
   .transfer-button {
     width: 100%;
