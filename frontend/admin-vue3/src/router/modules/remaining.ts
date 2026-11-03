@@ -65,7 +65,7 @@ const remainingRouter: AppRouteRecordRaw[] = [
             : () => import('@/views/Home/Index.vue'),
         name: 'Index',
         meta: {
-          title: t('router.home'),
+          title: import.meta.env.VITE_ADMIN_SCOPE === 'cps' ? '运营总览' : t('router.home'),
           icon: 'ep:home-filled',
           noCache: false,
           affix: true
